@@ -56,12 +56,13 @@ func TestTrue(t *testing.T) {
 }
 
 func TestAddHardCodedItem(t *testing.T) {
+
 	item := db.ToDoItem{
 		Id:     999,
 		Title:  "This is a test case item",
 		IsDone: false,
 	}
-	t.Log("Testing Adding a Hard Coded Item: ", item)
+	t.Log("Testing adding a hard coded item: ", item)
 
 	//TODO: finish this test, add an item to the database and then
 	//check that it was added correctly by looking it back up
@@ -73,11 +74,15 @@ func TestAddHardCodedItem(t *testing.T) {
 	//I will get you started, uncomment the lines below to add to the DB
 	//and ensure no errors:
 	//---------------------------------------------------------------
-	//err := DB.AddItem(item)
-	//assert.NoError(t, err, "Error adding item to DB")
+	err := DB.AddItem(item)
+	assert.NoError(t, err, "Error adding item to database")
 
 	//TODO: Now finish the test case by looking up the item in the DB
 	//and making sure it matches the item that you put in the DB above
+
+	retrievedItem, err := DB.GetItem(item.Id)
+	assert.NoError(t, err, "Error retrieving item from database")
+	assert.Equal(t, item, retrievedItem, "Retrieved item did not match hard coded item")
 }
 
 func TestAddRandomStructItem(t *testing.T) {
@@ -85,11 +90,18 @@ func TestAddRandomStructItem(t *testing.T) {
 	//Not going to do anyting
 	item := db.ToDoItem{}
 	err := fake.Struct(&item)
-	t.Log("Testing Adding a Randomly Generated Struct: ", item)
+	t.Log("Testing adding a randomly generated struct: ", item)
 
 	assert.NoError(t, err, "Created fake item OK")
 
 	//TODO: Complete the test
+
+	err = DB.AddItem(item)
+	assert.NoError(t, err, "Error adding item to database")
+
+	retrievedItem, err := DB.GetItem(item.Id)
+	assert.NoError(t, err, "Error retrieving item from database")
+	assert.Equal(t, item, retrievedItem, "retrieved item did not match hard coded item")
 }
 
 func TestAddRandomItem(t *testing.T) {
@@ -100,19 +112,199 @@ func TestAddRandomItem(t *testing.T) {
 		IsDone: fake.Bool(),
 	}
 
-	t.Log("Testing Adding an Item with Random Fields: ", item)
+	t.Log("Testing adding an item with random fields: ", item)
 
-}
+	err := DB.AddItem(item)
+	assert.NoError(t, err, "Error adding item to database")
 
-// TODO: Please delete this test from your submission, it does not do anything
-// but i wanted to demonstrate how you can starting shelling out your tests
-// and then implment them later.  The go testing framework provides a
-// Skip() function that just tells the testing framework to skip or ignore
-// this test function
-func TestAddPlaceholderTest(t *testing.T) {
-	t.Skip("Placeholder test not implemented yet")
+	retrievedItem, err := DB.GetItem(item.Id)
+	assert.NoError(t, err, "Error retrieving item from database")
+	assert.Equal(t, item, retrievedItem, "Retrieved item did not match hard coded item")
+
 }
 
 //TODO: Create additional tests to showcase the correct operation of your program
 //for example getting an item, getting all items, updating items, and so on. Be
 //creative here.
+
+func TestRestoreDB(t *testing.T) {
+
+	//Should overwrite with a blank file
+	file, err := os.OpenFile(DEFAULT_DB_FILE_NAME, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0644)
+	assert.NoError(t, err, "Couldn't create a blank db file")
+	defer file.Close()
+
+	err = DB.RestoreDB()
+	assert.NoError(t, err, "Error while restoring database")
+
+	areFilesEqual, err := areFilesEqual(t, DEFAULT_DB_FILE_NAME, DEFAULT_DB_FILE_NAME+".bak")
+	assert.NoError(t, err, "Error occurred comparing files")
+	assert.Equal(t, true, areFilesEqual)
+}
+
+// component of TestRestoreDB.
+// Not exported so it won't be confused as a standalone test
+func areFilesEqual(t *testing.T, file1, file2 string) (bool, error) {
+	contentFromFile1, err := os.Open(file1)
+	assert.NoError(t, err, "Could not read from file1")
+
+	contentFromFile2, err := os.Open(file2)
+	assert.NoError(t, err, "Could not read from file2")
+
+	bufferFile1 := make([]byte, 1024)
+	bufferFile2 := make([]byte, 1024)
+
+	for {
+		bytesReadFromFile1, err := contentFromFile1.Read(bufferFile1)
+		if err != nil && err.Error() != "EOF" {
+			return false, err
+		}
+
+		bytesReadFromFile2, err := contentFromFile2.Read(bufferFile2)
+		if err != nil && err.Error() != "EOF" {
+			return false, err
+		}
+
+		if bytesReadFromFile1 != bytesReadFromFile2 {
+			return false, nil
+
+		}
+
+		if bytesReadFromFile1 == 0 {
+			break
+		}
+
+		if len(bufferFile1) != len(bufferFile2) {
+			return false, nil
+		}
+
+		for i := range bufferFile1 {
+			if bufferFile1[i] != bufferFile2[i] {
+				return false, nil
+			}
+		}
+	}
+	return true, nil
+}
+
+func TestDeleteItem(t *testing.T) {
+	item := db.ToDoItem{
+		Id:     1002,
+		Title:  "This item should not be inside of the final object",
+		IsDone: false,
+	}
+	t.Log("Testing adding a hard coded item: ", item)
+
+	err := DB.AddItem(item)
+	assert.NoError(t, err, "Error adding item to database")
+
+	retrievedItem, err := DB.GetItem(item.Id)
+	assert.NoError(t, err, "Error retrieving item from database")
+	assert.Equal(t, item, retrievedItem, "Retrieved item did not match hard coded item")
+
+	err = DB.DeleteItem(item.Id)
+	assert.NoError(t, err, "Error deleting item from database")
+
+	retrievedItem, err = DB.GetItem(item.Id)
+	assert.Error(t, err, "There should have been an error retrieving data from the database")
+	assert.Equal(t, db.ToDoItem{}, retrievedItem, "retrieved item was not empty")
+
+}
+
+func TestUpdateItem(t *testing.T) {
+	item := db.ToDoItem{
+		Id:     1003,
+		Title:  "This is a test case item",
+		IsDone: false,
+	}
+	t.Log("Testing adding a hard coded item: ", item)
+
+	err := DB.AddItem(item)
+	assert.NoError(t, err, "Error adding item to database")
+
+	retrievedItem, err := DB.GetItem(item.Id)
+	assert.NoError(t, err, "Error retrieving item from database")
+	assert.Equal(t, item, retrievedItem, "Retrieved item did not match hard coded item")
+
+	updatedItem := db.ToDoItem{
+		Id:     item.Id,
+		Title:  item.Title,
+		IsDone: !item.IsDone,
+	}
+
+	err = DB.UpdateItem(updatedItem)
+	assert.NoError(t, err, "Error updating item in database")
+
+	retrievedItem, err = DB.GetItem(item.Id)
+	assert.NoError(t, err, "There was an error retrieving data from the database")
+	assert.Equal(t, updatedItem, retrievedItem, "Retrieved item was not updated.")
+}
+
+func TestGetItem(t *testing.T) {
+
+	item := db.ToDoItem{
+		Id:     1058,
+		Title:  "This is a test case item",
+		IsDone: false,
+	}
+
+	err := DB.AddItem(item)
+	assert.NoError(t, err, "Error adding item to database")
+
+	retrievedItem, err := DB.GetItem(item.Id)
+	assert.NoError(t, err, "Error retrieving item from database")
+
+	assert.Equal(t, item.Id, retrievedItem.Id, "Retrieved item Id did not match hard coded item")
+	assert.Equal(t, item.Title, retrievedItem.Title, "Retrieved item Title did not match hard coded item")
+	assert.Equal(t, item.IsDone, retrievedItem.IsDone, "Retrieved item IdDone status did not match hard coded item")
+}
+
+func TestGetAllItems(t *testing.T) {
+
+	item := db.ToDoItem{
+		Id:     1056,
+		Title:  "This should be in the array",
+		IsDone: false,
+	}
+	//	t.Log("Testing Adding a Hard Coded Item: ", item)
+
+	err := DB.AddItem(item)
+	assert.NoError(t, err, "Error adding item to database")
+
+	retrievedItems, err := DB.GetAllItems()
+	assert.NoError(t, err, "Error retrieving item from database")
+	assert.GreaterOrEqual(t, len(retrievedItems), 1)
+
+	counter := 0
+
+	for _, value := range retrievedItems {
+		if value.Id == item.Id {
+			counter += 1
+		}
+	}
+
+	assert.GreaterOrEqual(t, 1, counter, " The item we added was not in the list of retrieved items")
+}
+
+func TestChangeItemDoneStatus(t *testing.T) {
+	item := db.ToDoItem{
+		Id:     1006,
+		Title:  "This is a test case item",
+		IsDone: false,
+	}
+	t.Log("Testing adding a hard coded item: ", item)
+
+	err := DB.AddItem(item)
+	assert.NoError(t, err, "Error adding item to database")
+
+	retrievedItem, err := DB.GetItem(item.Id)
+	assert.NoError(t, err, "Error retrieving item from database")
+	assert.Equal(t, item, retrievedItem, "Retrieved item did not match hard coded item")
+
+	err = DB.ChangeItemDoneStatus(item.Id, !item.IsDone)
+	assert.NoError(t, err, "Error updating item in database")
+
+	retrievedItem, err = DB.GetItem(item.Id)
+	assert.NoError(t, err, "There was an error retrieving data from the database")
+	assert.Equal(t, true, retrievedItem.IsDone, "Retrieved item was not updated.")
+}
